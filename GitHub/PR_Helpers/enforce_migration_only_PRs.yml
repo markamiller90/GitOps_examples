@@ -1,0 +1,48 @@
+name: Enforce Migration PR
+on:
+  pull_request:
+jobs:
+  build:
+    name: Enforce Migration Only Pull Requests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine git sha to checkout
+        uses: haya14busa/action-cond@v1
+        id: gitsha
+        with:
+          cond: ${{ github.event_name == 'pull_request' }}
+          if_true: ${{ github.event.pull_request.head.sha }}
+          if_false: ${{ github.sha }}
+
+      - name: Set branch name if not PR
+        if: github.event_name != 'pull_request'
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
+
+      - name: Set branch name if PR
+        if: github.event_name == 'pull_request'
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_HEAD_REF})" >> $GITHUB_ENV
+
+      - name: Checkout ref
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.gitsha.outputs.value }}
+
+      - name: Check for migrations
+        uses: dorny/paths-filter@v2
+        id: migrations
+        with:
+          filters: |
+            src:
+              - 'db/migrate/**'
+
+      - name: Check for other changes
+        uses: dorny/paths-filter@v2
+        id: non-migration-changes
+        with:
+          filters: |
+            src:
+              - 'app/**'
+
+      - name: Enforce Migration Only PRs
+        if: ${{ steps.migrations.outputs.src == 'true' && steps.non-migration-changes.outputs.src == 'true' }}
+        run: echo "Migrations must be in a separate PR" && exit 1

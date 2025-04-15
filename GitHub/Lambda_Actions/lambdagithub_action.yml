@@ -1,0 +1,33 @@
+- name: GitHub Checkout Actions
+  uses: actions/checkout@v4
+
+- name: Configure to AWS
+  # if: github.ref == 'refs/heads/qualityassurance
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    role-session-name: GithubActionsRole
+    role-to-assume: ${{secrets.GH_ACTIONS_ROLE_ARN}}
+    aws-region: ${{secrets.SOURCE_REGION}}
+
+- name: step1 - set up python  
+  uses: actions/setup-node@v4
+  with:
+    node-veresion: "20.x"
+    
+- name: step2 - Install Dependencies  
+  run: |
+    cd ./FolderInsideYourGitHub/Filename
+    npm install --prod
+ 
+- name: step3 - Zip Function and Dependencies 
+  run: |
+    cd ./FolderInsideYourGitHub/Filename
+    zip -r functionName-version-1.zip folderYouWant fileYouWant node_modules index.js
+    
+- name: step4 - Upload Zipped Package
+  run: aws s3 cp ./FolderInsideYourGitHub/Filename s3://${{env.S3_BUCKET_NAME}}
+
+- name: step5 - Deploy Lambda Function
+  run: |
+    sam package --template-file cloudformation/lambdaAuth.yml --output-template-file lambdaSAMtemplate.yml --s3-bucket bucketName
+    sam deploy --template-file lambdaSAMtemplate.yml --stack-name myCloudFormationStackName --capabilities CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset --parameter-overrides ${{env.PARAMETER_OVERRIDES_ARE_OPTIONAL}} BucketSource=${{env.BUCKET_SOURCE_NAME}}
